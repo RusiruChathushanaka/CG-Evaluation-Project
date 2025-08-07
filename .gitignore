@@ -4,3 +4,4 @@ data
 *.xlsx
 data/
 __pycache__/
+logs/
