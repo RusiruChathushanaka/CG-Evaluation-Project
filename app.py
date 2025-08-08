@@ -6,21 +6,13 @@ from ydata_profiling import ProfileReport
 # Add the lib directory to Python path if needed
 sys.path.append('lib')
 
-# Import custom logger
+# Imports 
 from lib.logger import setup_logger, CustomLogger
+from lib import file_load
+from lib import data_transform
+from lib import supabase_connect
 
 
-try:
-    from lib import file_load
-except ImportError as e:
-    print(f"Error importing file_load module: {e}")
-    sys.exit(1)
-
-try:
-    from lib import data_transform
-except ImportError as e:
-    print(f"Error importing data_transform module: {e}")
-    sys.exit(1)
 
 def main():
     """Main application function."""
@@ -39,6 +31,11 @@ def main():
     logger.info("="*50)
     
     try:
+        # --- 0. INITIALIZE SUPABASE CLIENT ---
+        logger.info("--- Initializing Supabase Connection ---")
+        supabase_client = supabase_connect.get_supabase_client()
+        logger.info("Supabase client connected successfully.")
+        
         # --- 1. DATA LOADING ---
         logger.info("--- Starting Data Loading Stage ---")
         source_folder = 'data'
@@ -67,8 +64,31 @@ def main():
         
         logger.info("All tables created successfully in memory.")
 
+        # --- 3. DATA UPLOADING TO SUPABASE ---
+        logger.info("--- Starting Supabase Data Upload Stage ---")
+        
+        # The order is important due to foreign key constraints
+        upload_order = [
+            ('cg_dim_date', dim_date_df),
+            ('cg_dim_product', dim_product_df),
+            ('cg_dim_customer', dim_customer_df),
+            ('cg_dim_order', dim_order_df),
+            ('cg_fact_sales', fact_sales_df)  # Fact table must be last
+        ]
 
-        # --- 3. DATA SAVING ---
+        for table_name, df_to_upload in upload_order:
+            success = supabase_connect.upload_df_to_supabase(
+                client=supabase_client,
+                df=df_to_upload,
+                table_name=table_name
+            )
+            if not success:
+                # If any upload fails, stop the entire process
+                raise Exception(f"Supabase upload failed for table '{table_name}'. Halting application.")
+        
+        logger.info("All data successfully uploaded to Supabase.")
+
+        # --- 4. DATA SAVING ---
         logger.info("--- Starting Data Saving Stage ---")
         output_folder = 'transformed_data'
         

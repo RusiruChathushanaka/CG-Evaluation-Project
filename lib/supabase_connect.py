@@ -1,6 +1,12 @@
 import os
 from supabase import create_client, Client
 from postgrest import APIResponse
+import pandas as pd
+import numpy as np
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Load Supabase URL and API key from environment variables for security
 SUPABASE_URL = "https://rswtvogsljeupyoxdeww.supabase.co"
@@ -120,6 +126,72 @@ def delete_all_records(client: Client, table_name: str) -> list:
     except Exception as e:
         print(f"An error occurred while deleting records from '{table_name}': {e}")
         return []
+    
+
+# --------------------------------------------------------------------------
+#  Function to Upload a DataFrame to a Supabase Table
+# --------------------------------------------------------------------------
+def upload_df_to_supabase(client: Client, df: pd.DataFrame, table_name: str, batch_size: int = 1000) -> bool:
+    """
+    Deletes all existing data and uploads a DataFrame to a Supabase table in batches.
+    This version is more resilient and will proceed with an upload even if the initial delete fails.
+
+    Args:
+        client: The initialized Supabase client.
+        df: The pandas DataFrame to upload.
+        table_name: The name of the destination table in Supabase.
+        batch_size: The number of rows to insert in each batch.
+
+    Returns:
+        True if the upload was successful, False otherwise.
+    """
+    logger.info(f"Starting upload process for table '{table_name}' with {len(df)} rows.")
+
+    # 1. Attempt to delete all existing records.
+    # This is now a "best-effort" step. If it fails, we log a warning and continue.
+    # The subsequent insert will act as the definitive success/fail check.
+    if not delete_all_records(client, table_name):
+        logger.warning(
+            f"Could not clear table '{table_name}' before upload. "
+            f"Proceeding with insert anyway. This may fail if there are duplicate primary keys."
+        )
+
+    # 2. Prepare the DataFrame for upload
+    # Replace pandas NaN with None for database compatibility
+    df_clean = df.replace({np.nan: None})
+    
+    # Convert date columns to string format 'YYYY-MM-DD' if they exist
+    if 'order_date' in df_clean.columns:
+        df_clean['order_date'] = pd.to_datetime(df_clean['order_date']).dt.strftime('%Y-%m-%d')
+
+    # Convert DataFrame to a list of dictionaries
+    records = df_clean.to_dict(orient='records')
+    
+    if not records:
+        logger.warning(f"DataFrame for '{table_name}' is empty. Nothing to upload.")
+        return True
+
+    # 3. Insert data in batches
+    total_rows = len(records)
+    for i in range(0, total_rows, batch_size):
+        batch = records[i:i + batch_size]
+        logger.info(f"Uploading batch {i//batch_size + 1}: rows {i+1} to {min(i+batch_size, total_rows)} for '{table_name}'.")
+        
+        try:
+            response: APIResponse = client.from_(table_name).insert(batch).execute()
+            
+            # The API response for an insert should contain a list of the inserted records.
+            # If the length of the response data doesn't match the batch size, it's an error.
+            if len(response.data) != len(batch):
+                 logger.error(f"Upload failed for batch starting at row {i} for table '{table_name}'. Response: {response}")
+                 return False
+
+        except Exception as e:
+            logger.error(f"An exception occurred during batch insert for '{table_name}': {e}", exc_info=True)
+            return False
+            
+    logger.info(f"Successfully uploaded all {total_rows} rows to '{table_name}'.")
+    return True
 
 if __name__ == "__main__":
     try:
