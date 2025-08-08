@@ -78,15 +78,83 @@ def get_table_columns(client: Client, table_name: str) -> list:
     except Exception as e:
         print(f"An error occurred while fetching columns for '{table_name}': {e}")
         return []
+    
+# --------------------------------------------------------------------------
+#  Function to Delete All Records from a Table
+# --------------------------------------------------------------------------
+def delete_all_records(client: Client, table_name: str) -> list:
+    """
+    Deletes all records from a table and returns the data that was deleted.
+
+    THIS IS A DESTRUCTIVE OPERATION. USE WITH EXTREME CAUTION.
+
+    Args:
+        client: The initialized Supabase client.
+        table_name: The name of the table to clear.
+
+    Returns:
+        A list of dictionaries for the records that were deleted.
+        Returns an empty list if the table was already empty or an error occurred.
+    """
+    try:
+        print(f"--- WARNING: Attempting to delete ALL records from table: '{table_name}' ---")
+
+
+        columns = get_table_columns(client, table_name)
+        if not columns:
+            print(f"Table '{table_name}' is either empty or could not be accessed. No records to delete.")
+            return []
+
+        filter_column = columns[0]
+
+        print(f"Executing DELETE on '{table_name}' using filter on column '{filter_column}'...")
+        response: APIResponse = client.from_(table_name).delete().neq(filter_column, "IMPOSSIBLE_VALUE_TO_MATCH").execute()
+
+        if response.data:
+            print(f"Successfully deleted {len(response.data)} records.")
+            return response.data
+        else:
+            print(f"No records were deleted. The table may have been empty or check RLS policies for DELETE permissions.")
+            return []
+
+    except Exception as e:
+        print(f"An error occurred while deleting records from '{table_name}': {e}")
+        return []
 
 if __name__ == "__main__":
     try:
-        supabase = get_supabase_client()
+        supabase_client = get_supabase_client()
         print("Successfully connected to Supabase!")
 
-        columns = get_table_columns(supabase, "Rusiru_Portfolio_Site_Config")
-        print(f"Columns in 'Rusiru_Portfolio_Site_Config': {columns}")
-
         print("\n" + "="*40)
+        
+        table_to_modify = "cg_dim_customer" 
+
+        # --- Example 1: Get current data ---
+        print(f"Getting current data from '{table_to_modify}'...")
+        current_data = get_table_data(supabase_client, table_to_modify)
+        if current_data:
+            print(f"Found {len(current_data)} records. Showing first one: {current_data[0]}")
+        else:
+            print("Table is currently empty.")
+
+        # --- Example 2: Delete all records (use with caution!) ---
+        #
+        # UNCOMMENT THE FOLLOWING LINES TO RUN THE DELETE OPERATION
+        #
+        print("\n" + "="*40)
+        print("Running delete operation...")
+        deleted_data = delete_all_records(supabase_client, table_to_modify)
+        if deleted_data:
+            print(f"\nData that was deleted ({len(deleted_data)} records):")
+            # Print the first deleted record as a sample
+            print(deleted_data[0])
+        
+            # Verify the table is now empty
+            print("\nVerifying table is empty...")
+            final_data = get_table_data(supabase_client, table_to_modify)
+            if not final_data:
+                print(f"Verification successful: Table '{table_to_modify}' is now empty.")
+
     except Exception as e:
-        print(f"Failed to connect to Supabase: {e}")
+        print(f"An error occurred in the main script: {e}")
