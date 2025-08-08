@@ -1,6 +1,7 @@
 import logging
 from pathlib import Path
 import sys
+from ydata_profiling import ProfileReport
 
 # Add the lib directory to Python path if needed
 sys.path.append('lib')
@@ -68,7 +69,14 @@ def main():
         # Display first few rows
         print("\nFirst 5 rows of the dataset:")
         print(df.head())
-        
+
+        # Generate a profile report
+        logger.info("Generating profile report")
+        profile = ProfileReport(df, title="Sales Data Profile Report")
+        profile.to_file("reports/sales_data_profile_report.html")
+        logger.info("Profile report generated successfully")
+        print("Profile report generated: reports/sales_data_profile_report.html")
+
         # Log some basic statistics
         logger.info("Basic dataset statistics:")
         logger.info(f"  - Total rows: {len(df)}")
