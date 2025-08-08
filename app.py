@@ -9,11 +9,17 @@ sys.path.append('lib')
 # Import custom logger
 from lib.logger import setup_logger, CustomLogger
 
-# Import your file loading module
+
 try:
     from lib import file_load
 except ImportError as e:
     print(f"Error importing file_load module: {e}")
+    sys.exit(1)
+
+try:
+    from lib import data_transform
+except ImportError as e:
+    print(f"Error importing data_transform module: {e}")
     sys.exit(1)
 
 def main():
@@ -26,70 +32,54 @@ def main():
         log_level=logging.INFO
     )
     
-    # Alternative way using CustomLogger class directly:
-    # custom_logger = CustomLogger("SalesDataApp", "logs", logging.INFO)
-    # logger = custom_logger.get_logger()
+
     
     logger.info("="*50)
     logger.info("APPLICATION STARTED")
     logger.info("="*50)
     
     try:
-        # Log the start of file listing operation
-        logger.info("Starting CSV file listing operation")
-        folder_path = 'data'
-        
-        # List CSV files
-        logger.info(f"Searching for CSV files in folder: {folder_path}")
-        files = file_load.list_csv_files(folder_path=folder_path)
-        
-        if files:
-            logger.info(f"Found {len(files)} CSV files:")
-            for i, (filename, mod_time) in enumerate(files, 1):
-                logger.info(f"  {i}. {filename} (modified: {mod_time})")
-            print(f"Files found: {files}")
-        else:
-            logger.warning(f"No CSV files found in folder: {folder_path}")
-            print("No CSV files found")
-            return
-        
-        # Log the start of file reading operation
-        logger.info("Starting CSV file reading operation")
-        
-        # Read the latest CSV file
-        logger.info(f"Reading latest CSV file from folder: {folder_path}")
-        df = file_load.read_latest_csv(folder_path=folder_path, encoding="latin1")
-        
-        # Log DataFrame information
-        logger.info("CSV file successfully loaded")
-        logger.info(f"DataFrame shape: {df.shape}")
-        logger.info(f"DataFrame columns: {list(df.columns)}")
-        logger.info(f"DataFrame memory usage: {df.memory_usage(deep=True).sum() / 1024**2:.2f} MB")
-        
-        # Display first few rows
-        print("\nFirst 5 rows of the dataset:")
-        print(df.head())
+        # --- 1. DATA LOADING ---
+        logger.info("--- Starting Data Loading Stage ---")
+        source_folder = 'data'
+        raw_df = file_load.read_latest_csv(folder_path=source_folder, encoding="latin1")
+        logger.info("Raw data loaded successfully.")
+        logger.info(f"Raw DataFrame shape: {raw_df.shape}")
 
         # Generate a profile report
         logger.info("Generating profile report")
-        profile = ProfileReport(df, title="Sales Data Profile Report")
+        profile = ProfileReport(raw_df, title="Sales Data Profile Report")
         profile.to_file("reports/sales_data_profile_report.html")
         logger.info("Profile report generated successfully")
         print("Profile report generated: reports/sales_data_profile_report.html")
 
-        # Log some basic statistics
-        logger.info("Basic dataset statistics:")
-        logger.info(f"  - Total rows: {len(df)}")
-        logger.info(f"  - Total columns: {len(df.columns)}")
-        logger.info(f"  - Missing values: {df.isnull().sum().sum()}")
+        # --- 2. DATA TRANSFORMATION ---
+        logger.info("--- Starting Data Transformation Stage ---")
         
-        # Log data types
-        logger.debug("Column data types:")
-        for col, dtype in df.dtypes.items():
-            logger.debug(f"  - {col}: {dtype}")
+        # Create dimension tables
+        dim_date_df = data_transform.create_dim_date(raw_df)
+        dim_product_df = data_transform.create_dim_product(raw_df)
+        dim_customer_df = data_transform.create_dim_customer(raw_df)
+        dim_order_df = data_transform.create_dim_order(raw_df)
         
-        logger.info("Data loading and initial analysis completed successfully")
+        # Create fact table
+        fact_sales_df = data_transform.create_fact_sales(raw_df, dim_date_df)
         
+        logger.info("All tables created successfully in memory.")
+
+
+        # --- 3. DATA SAVING ---
+        logger.info("--- Starting Data Saving Stage ---")
+        output_folder = 'transformed_data'
+        
+        data_transform.save_df_to_csv(dim_date_df, output_folder, 'dim_date.csv')
+        data_transform.save_df_to_csv(dim_product_df, output_folder, 'dim_product.csv')
+        data_transform.save_df_to_csv(dim_customer_df, output_folder, 'dim_customer.csv')
+        data_transform.save_df_to_csv(dim_order_df, output_folder, 'dim_order.csv')
+        data_transform.save_df_to_csv(fact_sales_df, output_folder, 'fact_sales.csv')
+        
+        logger.info(f"All transformed data saved to '{output_folder}' directory.")
+
     except FileNotFoundError as e:
         logger.error(f"File not found error: {e}")
         print(f"Error: {e}")
