@@ -34,20 +34,15 @@ def get_table_data(client: Client, table_name: str) -> list:
         print(f"Attempting to fetch data from table: '{table_name}'...")
         response: APIResponse = client.from_(table_name).select("*").execute()
         
-        # The actual data is in the 'data' attribute of the response
         if response.data:
             print(f"Successfully fetched {len(response.data)} rows.")
             return response.data
         else:
-            # This could mean the table is empty or there was an issue
-            # that didn't raise an exception (e.g., RLS policy denial).
             print(f"No data returned for table '{table_name}'. It might be empty or check permissions.")
             return []
             
     except Exception as e:
         print(f"An error occurred while fetching data from '{table_name}': {e}")
-        # You might see errors here related to permissions if Row Level Security (RLS)
-        # is enabled and no policy allows the 'anon' role to select data.
         return []
 
 if __name__ == "__main__":
