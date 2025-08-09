@@ -16,7 +16,7 @@ CREATE TABLE cg_dim_product (
     product_name VARCHAR(100)
 );
 
--- Customer Dimension (Corrected)
+-- Customer Dimension 
 CREATE TABLE cg_dim_customer (
     customer_name VARCHAR(100) PRIMARY KEY,
     contact_first_name VARCHAR(50),
@@ -37,7 +37,7 @@ CREATE TABLE cg_dim_order (
     status VARCHAR(20)
 );
 
--- Sales Fact Table (Corrected)
+-- Sales Fact Table
 CREATE TABLE cg_fact_sales (
     sales_id SERIAL PRIMARY KEY,
     order_number INT REFERENCES cg_dim_order(order_number),
